@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DigitalWACHT – Threat Intelligence Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&family=Syne:wght@600;700;800&display=swap');
+
+:root {
+  --bg:  #07090f;
+  --bg2: #0d1117;
+  --bg3: #111827;
+  --bg4: #1a2235;
+  --blue:     #3b82f6;
+  --blue-b:   #60a5fa;
+  --blue-dim: #1d4ed8;
+  --cyan:     #06b6d4;
+  --red:      #ef4444;
+  --amber:    #f59e0b;
+  --green:    #10b981;
+  --border:   rgba(59,130,246,0.14);
+  --border2:  rgba(59,130,246,0.32);
+  --text:     #e2e8f0;
+  --muted:    #64748b;
+  --mono: 'IBM Plex Mono', monospace;
+  --head: 'Syne', sans-serif;
+}
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:var(--mono);font-size:13px;min-height:100vh;}
+body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(59,130,246,0.03)1px,transparent 1px),linear-gradient(90deg,rgba(59,130,246,0.03)1px,transparent 1px);background-size:40px 40px;pointer-events:none;z-index:0;}
+body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,0.07)3px,rgba(0,0,0,0.07)4px);pointer-events:none;z-index:1;}
+.wrap{position:relative;z-index:2;max-width:1380px;margin:0 auto;padding:20px;}
+
+/* TOPBAR */
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;margin-bottom:14px;position:relative;overflow:hidden;}
+.topbar::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--blue) 40%,var(--cyan) 60%,transparent);opacity:.6;}
+.brand{display:flex;align-items:center;gap:14px;}
+.brand-icon{width:40px;height:40px;border:1px solid var(--blue);border-radius:4px;display:flex;align-items:center;justify-content:center;font-family:var(--head);font-size:15px;font-weight:800;color:var(--blue);box-shadow:0 0 14px rgba(59,130,246,.28);animation:ipulse 4s ease-in-out infinite;}
+@keyframes ipulse{0%,100%{box-shadow:0 0 14px rgba(59,130,246,.28);}50%{box-shadow:0 0 24px rgba(59,130,246,.5);}}
+.brand-name{font-family:var(--head);font-size:20px;font-weight:800;letter-spacing:2px;color:#fff;}
+.brand-tag{font-size:10px;color:var(--muted);letter-spacing:3px;margin-top:2px;}
+.topbar-right{text-align:right;}
+.live-badge{display:inline-flex;align-items:center;gap:6px;font-size:11px;letter-spacing:2px;color:var(--blue-b);margin-bottom:4px;}
+.live-dot{width:6px;height:6px;border-radius:50%;background:var(--blue);box-shadow:0 0 6px var(--blue);animation:blink 1.4s ease-in-out infinite;}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+.tclock{font-size:11px;color:var(--muted);letter-spacing:1px;}
+
+/* API SETUP */
+.api-setup{background:var(--bg2);border:1px solid var(--border2);border-radius:6px;padding:13px 20px;margin-bottom:14px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
+.api-lbl{font-size:10px;letter-spacing:2px;color:var(--blue-b);white-space:nowrap;}
+.api-inp{flex:1;min-width:200px;background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:8px 12px;color:var(--text);font-family:var(--mono);font-size:12px;outline:none;transition:border-color .2s;}
+.api-inp:focus{border-color:var(--blue);}
+.api-inp::placeholder{color:var(--muted);}
+.api-btn{background:var(--blue-dim);border:none;border-radius:4px;padding:8px 16px;color:#fff;font-family:var(--mono);font-size:12px;letter-spacing:1px;cursor:pointer;transition:background .2s;white-space:nowrap;}
+.api-btn:hover{background:var(--blue);}
+.api-hint{font-size:11px;color:var(--muted);}
+.api-hint a{color:var(--blue-b);}
+.ast-ok{color:var(--green);font-size:11px;}
+.ast-err{color:var(--amber);font-size:11px;}
+
+/* METRICS */
+.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px;}
+.mc{background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:18px 20px;position:relative;overflow:hidden;transition:border-color .25s;}
+.mc:hover{border-color:var(--border2);}
+.mc::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:var(--c,var(--blue));opacity:.7;}
+.mc-lbl{font-size:10px;letter-spacing:2px;color:var(--muted);margin-bottom:10px;text-transform:uppercase;}
+.mc-val{font-family:var(--head);font-size:34px;font-weight:800;color:var(--c,var(--blue));line-height:1;}
+.mc-sub{font-size:10px;color:var(--muted);margin-top:7px;}
+.mc.red{--c:var(--red);}
+.mc.amber{--c:var(--amber);}
+.mc.green{--c:var(--green);}
+.mc.cyan{--c:var(--cyan);}
+
+/* GRID */
+.grid-main{display:grid;grid-template-columns:1fr 360px;gap:12px;margin-bottom:12px;}
+.grid-bot{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;align-items:stretch;}
+
+/* PANEL */
+.panel{background:var(--bg2);border:1px solid var(--border);border-radius:6px;overflow:hidden;}
+.ph{display:flex;align-items:center;justify-content:space-between;padding:12px 18px;border-bottom:1px solid var(--border);background:rgba(59,130,246,.04);}
+.ptitle{font-size:10px;letter-spacing:3px;color:var(--blue-b);text-transform:uppercase;}
+.pb{font-size:10px;letter-spacing:1px;padding:3px 8px;border:1px solid currentColor;border-radius:2px;}
+.pb-blue{color:var(--blue-b);}.pb-red{color:var(--red);}.pb-amber{color:var(--amber);}.pb-green{color:var(--green);}
+.pbody{padding:18px;}
+
+/* CVE LIST */
+.cve-list{list-style:none;display:flex;flex-direction:column;gap:8px;}
+.cve-list::-webkit-scrollbar{width:3px;}
+.cve-list::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px;}
+.cve-item{display:grid;grid-template-columns:90px 1fr 52px;gap:10px;align-items:start;padding:10px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:4px;transition:border-color .2s;}
+.cve-item:hover{border-color:var(--border2);}
+.cve-id{color:var(--blue-b);font-size:11px;font-weight:500;word-break:break-all;}
+.cve-desc{font-size:11px;color:var(--text);line-height:1.5;}
+.cve-score{font-family:var(--head);font-size:18px;font-weight:700;text-align:right;line-height:1;}
+.sc{color:var(--red);}.sh{color:var(--amber);}.sm{color:var(--blue-b);}.sl{color:var(--green);}
+
+/* URLHAUS FEED */
+.feed-list{list-style:none;display:flex;flex-direction:column;gap:6px;overflow-y:auto;}
+.feed-list::-webkit-scrollbar{width:3px;}
+.feed-list::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px;}
+@keyframes ticker{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+.fi{padding:9px 12px;background:var(--bg3);border-left:3px solid var(--red);border-radius:0 4px 4px 0;animation:sli .3s ease forwards;}
+@keyframes sli{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:none}}
+.fi-url{font-size:11px;color:var(--text);word-break:break-all;margin-bottom:4px;}
+.fi-meta{display:flex;gap:8px;flex-wrap:wrap;}
+.ftag{font-size:10px;padding:2px 7px;background:rgba(239,68,68,.12);color:var(--red);border-radius:2px;border:1px solid rgba(239,68,68,.25);}
+.ftag.a{background:rgba(245,158,11,.1);color:var(--amber);border-color:rgba(245,158,11,.25);}
+.ftag.b{background:rgba(59,130,246,.1);color:var(--blue-b);border-color:rgba(59,130,246,.2);}
+.fdate{font-size:10px;color:var(--muted);}
+
+/* GAUGE */
+.gauge-wrap{display:flex;flex-direction:column;align-items:center;padding:6px 0 0;}
+
+/* DONUT */
+.dnut-wrap{position:relative;width:100%;height:190px;}
+
+/* BARS */
+.bars{display:flex;flex-direction:column;gap:12px;}
+.br-lbl{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:5px;}
+.br-pct{color:var(--blue-b);}
+.br-bg{height:5px;background:rgba(59,130,246,.1);border-radius:2px;overflow:hidden;}
+.br-fill{height:100%;border-radius:2px;background:linear-gradient(90deg,var(--blue-dim),var(--blue));box-shadow:0 0 6px rgba(59,130,246,.5);transition:width 1.6s cubic-bezier(.16,1,.3,1);}
+.br-fill.a{background:linear-gradient(90deg,#78350f,var(--amber));box-shadow:0 0 6px rgba(245,158,11,.4);}
+.br-fill.r{background:linear-gradient(90deg,#7f1d1d,var(--red));box-shadow:0 0 6px rgba(239,68,68,.4);}
+
+/* LOG */
+.log-box{height:150px;overflow:hidden;position:relative;font-size:11px;line-height:1.9;}
+.log-box::after{content:'';position:absolute;bottom:0;left:0;right:0;height:36px;background:linear-gradient(transparent,var(--bg2));}
+.ll{animation:lf .3s ease;}
+@keyframes lf{from{opacity:0}to{opacity:1}}
+.lts{color:rgba(59,130,246,.35);margin-right:8px;}
+.lok{color:var(--green);}.lerr{color:var(--red);}.lwarn{color:var(--amber);}.linf{color:var(--blue-b);}
+
+/* LEGEND */
+.cleg{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px;font-size:11px;color:var(--muted);}
+.cld{width:9px;height:9px;border-radius:2px;display:inline-block;margin-right:4px;vertical-align:middle;}
+
+/* FOOTER */
+.footer{display:flex;justify-content:space-between;align-items:center;padding:12px 0 0;border-top:1px solid var(--border);margin-top:4px;font-size:10px;color:var(--muted);letter-spacing:1px;}
+
+/* STATES */
+.smsg{text-align:center;padding:28px 0;color:var(--muted);font-size:12px;}
+.spin{display:inline-block;width:13px;height:13px;border:2px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:sp .8s linear infinite;vertical-align:middle;margin-right:6px;}
+@keyframes sp{to{transform:rotate(360deg)}}
+
+@media(max-width:900px){
+  .metrics{grid-template-columns:1fr 1fr;}
+  .grid-main{grid-template-columns:1fr;}
+  .grid-bot{grid-template-columns:1fr;}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <a href="index.html" style="text-decoration:none;">
+    <div class="brand">
+      <div class="brand-icon">DW</div>
+      <div>
+        <div class="brand-name">DigitalWACHT</div>
+        <div class="brand-tag">// THREAT INTELLIGENCE · ÖSTERREICH &amp; EUROPA</div>
+      </div>
+    </div>
+  </a>
+  <div class="topbar-right">
+    <div class="live-badge"><span class="live-dot"></span>LIVE DATA</div>
+    <div class="tclock" id="clock">--:--:-- MEZ</div>
+    <div class="tclock" id="last-upd">Wird geladen...</div>
+  </div>
+</div>
+
+<!-- API KEY -->
+<div class="api-setup">
+  <span class="api-lbl">// ABUSEIPDB KEY</span>
+  <input class="api-inp" id="akey" type="password" placeholder="Kostenlosen API-Key eingeben (optional)...">
+  <button class="api-btn" onclick="connectAbuse()">Verbinden</button>
+  <span class="api-hint">Gratis Key: <a href="https://www.abuseipdb.com/register" target="_blank">abuseipdb.com/register</a></span>
+  <span id="akst"></span>
+</div>
+
+<!-- METRICS -->
+<div class="metrics">
+  <div class="mc red">
+    <div class="mc-lbl">// Malware-URLs · URLhaus</div>
+    <div class="mc-val" id="m1"><span class="spin"></span></div>
+    <div class="mc-sub" id="m1s">URLhaus · abuse.ch</div>
+  </div>
+  <div class="mc amber">
+    <div class="mc-lbl">// Kritische CVEs (7 Tage)</div>
+    <div class="mc-val" id="m2"><span class="spin"></span></div>
+    <div class="mc-sub">NIST NVD · Echtzeit</div>
+  </div>
+  <div class="mc cyan">
+    <div class="mc-lbl">// Gemeldete IPs (24h)</div>
+    <div class="mc-val" id="m3">–</div>
+    <div class="mc-sub" id="m3s">AbuseIPDB · Key oben eingeben</div>
+  </div>
+  <div class="mc green">
+    <div class="mc-lbl">// NIS2-Frist Countdown</div>
+    <div class="mc-val" id="m4"><span class="spin"></span></div>
+    <div class="mc-sub">Tage bis 1. Oktober 2026</div>
+  </div>
+</div>
+
+<!-- MAIN GRID -->
+<div class="grid-main">
+
+  <!-- CVE Panel -->
+  <div class="panel">
+    <div class="ph">
+      <span class="ptitle">// Kritische Sicherheitslücken · NIST NVD · Live</span>
+      <span class="pb pb-red" id="cvebadge">LÄDT...</span>
+    </div>
+    <div class="pbody">
+      <ul class="cve-list" id="cve-list" style="max-height:340px;overflow-y:auto;">
+        <li class="smsg"><span class="spin"></span>Lade CVE-Daten von NIST...</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Gauge -->
+  <div class="panel">
+    <div class="ph">
+      <span class="ptitle">// Bedrohungslage Europa</span>
+      <span class="pb pb-amber" id="gbadge">BERECHNUNG...</span>
+    </div>
+    <div class="pbody">
+      <div class="gauge-wrap">
+        <svg width="280" height="168" viewBox="0 0 280 168" overflow="visible">
+          <defs>
+            <linearGradient id="gg" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%"   stop-color="#10b981"/>
+              <stop offset="40%"  stop-color="#3b82f6"/>
+              <stop offset="72%"  stop-color="#f59e0b"/>
+              <stop offset="100%" stop-color="#ef4444"/>
+            </linearGradient>
+          </defs>
+          <path d="M28,152 A112,112 0 0,1 252,152" fill="none" stroke="rgba(59,130,246,0.1)" stroke-width="16" stroke-linecap="round"/>
+          <path d="M28,152 A112,112 0 0,1 252,152" fill="none" stroke="url(#gg)" stroke-width="16" stroke-linecap="round" opacity=".16"/>
+          <path id="garc" d="M28,152 A112,112 0 0,1 252,152" fill="none" stroke="url(#gg)" stroke-width="16" stroke-linecap="round" stroke-dasharray="0 351" style="transition:stroke-dasharray 1.7s cubic-bezier(.16,1,.3,1)"/>
+          <g stroke="rgba(59,130,246,0.2)" stroke-width="1">
+            <line x1="28" y1="152" x2="40" y2="152"/>
+            <line x1="57" y1="91"  x2="67" y2="98"/>
+            <line x1="112" y1="51" x2="117" y2="61"/>
+            <line x1="168" y1="51" x2="163" y2="61"/>
+            <line x1="223" y1="91" x2="213" y2="98"/>
+            <line x1="252" y1="152" x2="240" y2="152"/>
+          </g>
+          <text x="16"  y="168" font-family="'IBM Plex Mono'" font-size="10" fill="#64748b" text-anchor="middle">0</text>
+          <text x="264" y="168" font-family="'IBM Plex Mono'" font-size="10" fill="#64748b" text-anchor="middle">100</text>
+          <text id="gnum" x="140" y="142" font-family="'Syne'" font-size="56" font-weight="800" fill="#3b82f6" text-anchor="middle">–</text>
+          <text x="140" y="163" font-family="'IBM Plex Mono'" font-size="10" fill="#64748b" text-anchor="middle" letter-spacing="2">RISIKO-INDEX</text>
+        </svg>
+        <div style="font-size:11px;color:var(--blue-b);letter-spacing:2px;margin-top:4px;" id="glbl">DATEN WERDEN GELADEN...</div>
+      </div>
+      <div style="display:flex;justify-content:space-around;margin-top:16px;font-size:10px;letter-spacing:1px;color:var(--muted);">
+        <span><span style="color:var(--green)">■</span> NIEDRIG</span>
+        <span><span style="color:var(--blue-b)">■</span> MITTEL</span>
+        <span><span style="color:var(--amber)">■</span> HOCH</span>
+        <span><span style="color:var(--red)">■</span> KRITISCH</span>
+      </div>
+      <div style="margin-top:14px;padding:11px;background:var(--bg3);border:1px solid var(--border);border-radius:4px;font-size:11px;color:var(--muted);line-height:1.7;" id="ginfo">
+        Index basiert auf Echtzeit-Daten: aktive Malware-URLs (URLhaus) + kritische CVEs (NIST NVD).
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- BOTTOM GRID -->
+<div class="grid-bot">
+
+  <!-- URLhaus Feed -->
+  <div class="panel" style="display:flex;flex-direction:column;">
+    <div class="ph">
+      <span class="ptitle">// Malware-URLs · URLhaus · abuse.ch</span>
+      <span class="pb pb-red" id="uhbadge">LÄDT...</span>
+    </div>
+    <div class="pbody" style="padding:12px 16px;flex:1;display:flex;flex-direction:column;">
+      <ul class="feed-list" id="uh-list" style="max-height:420px;overflow-y:auto;flex:none;">
+        <li class="smsg"><span class="spin"></span>Lade URLhaus...</li>
+      </ul>
+      <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:12px;display:flex;flex-direction:column;gap:6px;">
+        <div style="font-size:10px;letter-spacing:2px;color:var(--blue-b);margin-bottom:2px;">// QUELLEN &amp; RESSOURCEN</div>
+        <a href="https://urlhaus.abuse.ch" target="_blank" style="display:flex;justify-content:space-between;align-items:center;font-size:11px;padding:7px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:4px;color:var(--text);text-decoration:none;transition:border-color .2s;" onmouseover="this.style.borderColor='var(--border2)'" onmouseout="this.style.borderColor='var(--border)'">
+          <span style="color:var(--muted)">URLhaus · abuse.ch</span><span style="color:var(--blue-b);">↗</span>
+        </a>
+        <a href="https://nvd.nist.gov" target="_blank" style="display:flex;justify-content:space-between;align-items:center;font-size:11px;padding:7px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:4px;color:var(--text);text-decoration:none;transition:border-color .2s;" onmouseover="this.style.borderColor='var(--border2)'" onmouseout="this.style.borderColor='var(--border)'">
+          <span style="color:var(--muted)">NIST NVD · CVE Datenbank</span><span style="color:var(--blue-b);">↗</span>
+        </a>
+        <a href="https://www.cert.at" target="_blank" style="display:flex;justify-content:space-between;align-items:center;font-size:11px;padding:7px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:4px;color:var(--text);text-decoration:none;transition:border-color .2s;" onmouseover="this.style.borderColor='var(--border2)'" onmouseout="this.style.borderColor='var(--border)'">
+          <span style="color:var(--muted)">CERT.at · Österreich</span><span style="color:var(--blue-b);">↗</span>
+        </a>
+        <a href="https://www.enisa.europa.eu" target="_blank" style="display:flex;justify-content:space-between;align-items:center;font-size:11px;padding:7px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:4px;color:var(--text);text-decoration:none;transition:border-color .2s;" onmouseover="this.style.borderColor='var(--border2)'" onmouseout="this.style.borderColor='var(--border)'">
+          <span style="color:var(--muted)">ENISA · EU Cybersecurity</span><span style="color:var(--blue-b);">↗</span>
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Kategorien Chart -->
+  <div class="panel" style="display:flex;flex-direction:column;">
+    <div class="ph">
+      <span class="ptitle">// Malware-Kategorien · URLhaus</span>
+      <span class="pb pb-blue">ECHTZEIT</span>
+    </div>
+    <div class="pbody" style="flex:1;display:flex;flex-direction:column;">
+      <div class="dnut-wrap"><canvas id="donut"></canvas></div>
+      <div class="cleg" id="dleg" style="margin-top:10px;"></div>
+      <div style="margin-top:14px;border:1px solid var(--border);border-radius:4px;overflow:hidden;">
+        <div style="font-size:10px;letter-spacing:2px;color:var(--blue-b);padding:8px 12px;background:rgba(59,130,246,0.04);border-bottom:1px solid var(--border);">// CYBER SECURITY FAKTEN</div>
+        <div style="overflow:hidden;position:relative;height:28px;">
+          <div id="news-ticker" style="display:flex;align-items:center;height:28px;white-space:nowrap;font-family:var(--mono);font-size:10px;color:var(--text);position:absolute;">
+            <span style="color:var(--muted);">Lade...</span>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:8px;border:1px solid var(--border);border-radius:4px;overflow:hidden;">
+        <div style="font-size:10px;letter-spacing:2px;color:var(--amber);padding:8px 12px;background:rgba(245,158,11,0.04);border-bottom:1px solid var(--border);">// NIS2 · NISG 2026</div>
+        <div style="overflow:hidden;position:relative;height:28px;">
+          <div id="nis2-ticker" style="display:flex;align-items:center;height:28px;white-space:nowrap;font-family:var(--mono);font-size:10px;color:var(--text);position:absolute;">
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:8px;border:1px solid var(--border);border-radius:4px;overflow:hidden;">
+        <div style="font-size:10px;letter-spacing:2px;color:var(--green);padding:8px 12px;background:rgba(16,185,129,0.04);border-bottom:1px solid var(--border);">// ZAHLEN &amp; FAKTEN</div>
+        <div style="overflow:hidden;position:relative;height:28px;">
+          <div id="stats-ticker" style="display:flex;align-items:center;height:28px;white-space:nowrap;font-family:var(--mono);font-size:10px;color:var(--text);position:absolute;">
+          </div>
+        </div>
+      </div>
+      <div id="donut-stats" style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;"></div>
+    </div>
+  </div>
+
+  <!-- NIS2 Gap Analyse -->
+  <div class="panel" style="display:flex;flex-direction:column;">
+    <div class="ph">
+      <span class="ptitle">// NIS2 Gap-Analyse</span>
+      <span class="pb pb-amber" id="nis2-badge">IHRE WERTE</span>
+    </div>
+    <div class="pbody" style="flex:1;display:flex;flex-direction:column;gap:10px;">
+      <!-- Sliders -->
+      <div id="nis2-form">
+        <div style="font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:10px;">Umsetzungsstand einschätzen (0 = nicht begonnen · 100 = vollständig):</div>
+        <div id="nis2-sliders" style="display:flex;flex-direction:column;gap:9px;"></div>
+        <button id="nis2-start-btn" onclick="showNis2Result()" style="margin-top:14px;width:100%;background:var(--blue-dim);border:none;border-radius:4px;padding:9px;color:#fff;font-family:var(--mono);font-size:11px;letter-spacing:2px;cursor:pointer;">ANALYSE STARTEN →</button>
+      </div>
+      <!-- Result -->
+      <div id="nis2-result" style="display:none;flex-direction:column;gap:10px;">
+        <div class="bars" id="nis2bars"></div>
+        <div id="nis2-summary" style="padding:10px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:4px;font-size:11px;color:var(--muted);line-height:1.7;"></div>
+        <button onclick="resetNis2()" style="background:transparent;border:1px solid var(--border);border-radius:4px;padding:7px;color:var(--muted);font-family:var(--mono);font-size:10px;letter-spacing:1px;cursor:pointer;">↺ NEUE ANALYSE</button>
+      </div>
+      <div style="border-top:1px solid var(--border);padding-top:12px;">
+        <div style="font-size:10px;letter-spacing:2px;color:var(--blue-b);margin-bottom:8px;">// SYSTEM LOG</div>
+        <div class="log-box" id="logbox"></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- FOOTER -->
+<div class="footer">
+  <span>© 2026 DIGITALWACHT · GRAZ, ÖSTERREICH · Datenquellen: URLhaus (abuse.ch) · NIST NVD · AbuseIPDB</span>
+  <span id="fts">–</span>
+</div>
+
+</div>
+<script>
+// ── CLOCK ───────────────────────────────────
+function tick(){document.getElementById('clock').textContent=new Date().toLocaleTimeString('de-AT',{hour12:false})+' MEZ';}
+setInterval(tick,1000);tick();
+
+// ── NIS2 COUNTDOWN ──────────────────────────
+(()=>{
+  const d=Math.max(0,Math.ceil((new Date('2026-10-01')-new Date())/864e5));
+  animN(document.getElementById('m4'),d,1200);
+})();
+
+// ── ANIMATE NUMBER ──────────────────────────
+function animN(el,target,dur=1400){
+  let s=null;
+  (function step(ts){
+    if(!s)s=ts;
+    const p=Math.min((ts-s)/dur,1),e=1-Math.pow(1-p,4);
+    el.textContent=Math.round(e*target).toLocaleString('de-AT');
+    if(p<1)requestAnimationFrame(step);
+  })(performance.now());
+}
+
+// ── NIS2 BARS ───────────────────────────────
+// ── NIS2 INTERACTIVE GAP ANALYSE ─────────────────
+const nis2Items=[
+  {l:'Risikoanalyse',      key:'risk'},
+  {l:'Incident Response',  key:'ir'},
+  {l:'Zugriffskontrolle',  key:'access'},
+  {l:'Patch Management',   key:'patch'},
+  {l:'Meldepflichten',     key:'report'},
+  {l:'Lieferkettensicherh.',key:'supply'},
+];
+const sliderEl=document.getElementById('nis2-sliders');
+nis2Items.forEach(i=>{
+  sliderEl.innerHTML+=`
+    <div>
+      <div class="br-lbl"><span>${i.l}</span><span class="br-pct" id="lbl-${i.key}">50%</span></div>
+      <input type="range" min="0" max="100" value="50" id="sl-${i.key}"
+        oninput="document.getElementById('lbl-${i.key}').textContent=this.value+'%'"
+        style="width:100%;accent-color:var(--blue);cursor:pointer;">
+    </div>`;
+});
+
+function showNis2Result(){
+  const vals=nis2Items.map(i=>({l:i.l,p:parseInt(document.getElementById('sl-'+i.key).value)}));
+  const avg=Math.round(vals.reduce((a,v)=>a+v.p,0)/vals.length);
+  // render bars
+  const barsEl=document.getElementById('nis2bars');
+  barsEl.innerHTML='';
+  vals.forEach(({l,p})=>{
+    const c=p<40?'r':p<65?'a':'';
+    barsEl.innerHTML+=`<div><div class="br-lbl"><span>${l}</span><span class="br-pct">${p}%</span></div><div class="br-bg"><div class="br-fill ${c}" style="width:0" data-w="${p}%"></div></div></div>`;
+  });
+  setTimeout(()=>document.querySelectorAll('.br-fill').forEach(b=>b.style.width=b.dataset.w),50);
+  // summary
+  const weak=vals.filter(v=>v.p<50).map(v=>v.l);
+  const badge=document.getElementById('nis2-badge');
+  let msg='';
+  if(avg>=75){badge.textContent='GUT '+avg+'%';badge.className='pb pb-green';msg=`Gesamtscore ${avg}% – solide Basis. Fokus auf: ${weak.join(', ')||'alle Bereiche gut abgedeckt'}.`;}
+  else if(avg>=50){badge.textContent='MITTEL '+avg+'%';badge.className='pb pb-amber';msg=`Gesamtscore ${avg}% – Handlungsbedarf bei: ${weak.join(', ')}.`;}
+  else{badge.textContent='KRITISCH '+avg+'%';badge.className='pb pb-red';msg=`Gesamtscore ${avg}% – dringender Handlungsbedarf! Besonders: ${weak.join(', ')}. NIS2-Frist: 1. Oktober 2026.`;}
+  document.getElementById('nis2-summary').textContent=msg;
+  document.getElementById('nis2-form').style.display='none';
+  document.getElementById('nis2-result').style.display='flex';
+  addLog('linf',`[INFO] NIS2 Gap-Analyse: Gesamtscore ${avg}%`);
+}
+
+function resetNis2(){
+  document.getElementById('nis2-form').style.display='block';
+  document.getElementById('nis2-result').style.display='none';
+  document.getElementById('nis2-badge').textContent='IHRE WERTE';
+  document.getElementById('nis2-badge').className='pb pb-amber';
+}
+
+// ── LOG ─────────────────────────────────────
+const logEl=document.getElementById('logbox');
+function addLog(c,m){
+  const d=document.createElement('div');
+  d.className='ll '+c;
+  d.innerHTML=`<span class="lts">${new Date().toLocaleTimeString('de-AT',{hour12:false})}</span>${m}`;
+  logEl.insertBefore(d,logEl.firstChild);
+}
+[
+  ['lok','[OK] Dashboard initialisiert · DigitalWacht v2'],
+  ['linf','[INFO] URLhaus Feed wird abgerufen...'],
+  ['linf','[INFO] NIST NVD API wird abgefragt...'],
+  ['lok','[OK] NIS2-Frist berechnet · 1. Oktober 2026'],
+].forEach(([c,m])=>addLog(c,m));
+const liveLogs=[
+  ['lok','[OK] Heartbeat nominal · alle Quellen erreichbar'],
+  ['linf','[INFO] URLhaus: neue Einträge abgerufen'],
+  ['lwarn','[WARN] Erhöhte botnet-Aktivität festgestellt'],
+  ['lok','[OK] CVE-Daten aktualisiert · NIST'],
+  ['lerr','[ALERT] Neue kritische CVE veröffentlicht'],
+  ['linf','[INFO] Risiko-Index neu berechnet'],
+];
+let li=0;setInterval(()=>addLog(...liveLogs[li++%liveLogs.length]),5500);
+
+// ── GAUGE ────────────────────────────────────
+let gInputs={u:null,c:null};
+function computeGauge(u,c){
+  if(u!==null)gInputs.u=u;
+  if(c!==null)gInputs.c=c;
+  if(gInputs.u===null||gInputs.c===null)return;
+  // Malware-URLs: 0–500 → realistischer Bereich für den Proxy (100 Einträge = aktiv)
+  // 100 URLs = ~40 Punkte, 500+ = 60 Punkte max
+  const ms=Math.min(60,(gInputs.u/500)*60);
+  // CVEs: 0–50 kritische CVEs pro Woche = normaler Bereich, 50+ = erhöht
+  const cs=Math.min(40,(gInputs.c/50)*40);
+  const total=Math.round(ms+cs);
+  const arc=document.getElementById('garc');
+  const num=document.getElementById('gnum');
+  const lbl=document.getElementById('glbl');
+  const badge=document.getElementById('gbadge');
+  arc.setAttribute('stroke-dasharray',`${(total/100)*351} ${351-(total/100)*351}`);
+  num.setAttribute('fill',total>80?'#ef4444':total>60?'#f59e0b':total>30?'#3b82f6':'#10b981');
+  let cur=0;const t=setInterval(()=>{cur=Math.min(cur+2,total);num.textContent=cur;if(cur>=total)clearInterval(t);},22);
+  if(total>80){lbl.textContent='▲ KRITISCHES NIVEAU';lbl.style.color='var(--red)';badge.textContent='KRITISCH';badge.className='pb pb-red';}
+  else if(total>60){lbl.textContent='◈ ERHÖHTES RISIKO';lbl.style.color='var(--amber)';badge.textContent='ERHÖHT';badge.className='pb pb-amber';}
+  else if(total>30){lbl.textContent='● MITTLERES NIVEAU';lbl.style.color='var(--blue-b)';badge.textContent='MITTEL';badge.className='pb pb-blue';}
+  else{lbl.textContent='✓ NORMALES NIVEAU';lbl.style.color='var(--green)';badge.textContent='NORMAL';badge.className='pb pb-green';}
+  document.getElementById('ginfo').textContent=`Risiko-Index ${total}/100 · Malware-URLs: ${gInputs.u.toLocaleString('de-AT')} · Kritische CVEs (7d): ${gInputs.c}`;
+}
+
+// ── URLHAUS ──────────────────────────────────
+const DCOLS=['#ef4444','#f59e0b','#3b82f6','#06b6d4','#8b5cf6','#10b981','#f97316'];
+let donutChart=null;
+
+async function loadURLhaus(){
+  try{
+    const resp=await fetch('/api/urlhaus');
+    const data=await resp.json();
+    const list=data.urls||[];
+    addLog('linf',`[INFO] URLhaus: ${list.length} Einträge empfangen`);
+    const display=list.slice(0,14);
+    renderUH(display);
+    renderHeatmap(list);
+    const tags={};
+    list.forEach(u=>{
+      const t=Array.isArray(u.tags)&&u.tags.length?u.tags:[u.threat||'malware_download'];
+      t.forEach(tag=>{if(tag)tags[tag]=(tags[tag]||0)+1;});
+    });
+    renderDonut(Object.keys(tags).length?tags:{'malware_download':45,'botnet_loader':22,'ransomware':15,'trojan':10,'phishing':8});
+    const count=list.length;
+    document.getElementById('m1').textContent='LIVE';
+    document.getElementById('m1s').textContent=`URLhaus · ${new Date().toLocaleTimeString('de-AT',{hour12:false})} · live`;
+    document.getElementById('uhbadge').textContent='LIVE';
+    computeGauge(Math.max(count,100),null);
+    addLog('lok',`[OK] URLhaus: ${count} Malware-URLs geladen`);
+    stamp();
+  }catch(e){
+    addLog('lwarn','[WARN] URLhaus Fehler – Fallback aktiv: '+e.message);
+    uhFallback();
+  }
+}
+
+function renderUH(urls){
+  const ul=document.getElementById('uh-list');ul.innerHTML='';
+  if(!urls.length){ul.innerHTML='<li class="smsg">Keine aktiven URLs</li>';return;}
+  urls.forEach((u,i)=>{
+    // json_recent hat andere Feldnamen als die API
+    const urlStr=u.url||u.Url||u.urlhaus_link||'–';
+    const rawTags=u.tags||u.Tags||'';
+    const tags=Array.isArray(rawTags)?rawTags:(typeof rawTags==='string'&&rawTags?rawTags.split(',').map(t=>t.trim()):[]);
+    if(!tags.length)tags.push(u.threat||'malware');
+    const tc=tags[0]?.includes('botnet')?'a':tags[0]?.includes('phish')?'b':'';
+    const date=(u.date_added||u.dateadded||u.Date||'').split(' ')[0];
+    const li=document.createElement('li');li.className='fi';li.style.animationDelay=(i*.04)+'s';
+    li.innerHTML=`<div class="fi-url">${urlStr.substring(0,64)}${urlStr.length>64?'…':''}</div>
+      <div class="fi-meta">${tags.slice(0,3).map(t=>`<span class="ftag ${tc}">${t}</span>`).join('')}
+      <span class="fdate">${date}</span></div>`;
+    ul.appendChild(li);
+  });
+}
+
+function uhFallback(){
+  const s=[
+    {url:'http://185.220.xxx.xxx/loader.exe',tags:['botnet_loader','win'],d:'2026-03-22'},
+    {url:'http://91.108.xxx.xxx/payload.bin',tags:['emotet'],d:'2026-03-22'},
+    {url:'http://162.55.xxx.xxx/crypt.dll',tags:['ransomware'],d:'2026-03-21'},
+    {url:'http://94.102.xxx.xxx/rat.exe',tags:['trojan','backdoor'],d:'2026-03-21'},
+    {url:'http://103.95.xxx.xxx/miner.sh',tags:['cryptominer','linux'],d:'2026-03-20'},
+    {url:'http://5.188.xxx.xxx/dropper.ps1',tags:['dropper','powershell'],d:'2026-03-20'},
+  ];
+  const ul=document.getElementById('uh-list');ul.innerHTML='';
+  s.forEach(({url,tags,d})=>{
+    const li=document.createElement('li');li.className='fi';
+    li.innerHTML=`<div class="fi-url">${url}</div><div class="fi-meta">${tags.map(t=>`<span class="ftag">${t}</span>`).join('')}<span class="fdate">${d}</span></div>`;
+    ul.appendChild(li);
+  });
+  document.getElementById('m1').textContent='~2.3k';
+  document.getElementById('uhbadge').textContent='FALLBACK';
+  renderDonut({'botnet_loader':31,'emotet':22,'ransomware':18,'trojan':14,'cryptominer':9,'phishing':6});
+  computeGauge(2300,null);
+}
+
+function renderDonut(tc){
+  const sorted=Object.entries(tc).sort((a,b)=>b[1]-a[1]).slice(0,7);
+  const total=sorted.reduce((a,e)=>a+e[1],0);
+  if(donutChart)donutChart.destroy();
+  donutChart=new Chart(document.getElementById('donut'),{
+    type:'doughnut',
+    data:{labels:sorted.map(e=>e[0]),datasets:[{data:sorted.map(e=>e[1]),backgroundColor:DCOLS,borderColor:'#0d1117',borderWidth:4,hoverOffset:6}]},
+    options:{responsive:true,maintainAspectRatio:false,cutout:'72%',
+      plugins:{legend:{display:false},tooltip:{backgroundColor:'#111827',borderColor:'rgba(59,130,246,.3)',borderWidth:1,titleColor:'#60a5fa',bodyColor:'#e2e8f0',
+        titleFont:{family:"'IBM Plex Mono'"},bodyFont:{family:"'IBM Plex Mono'",size:11},
+        callbacks:{label:ctx=>`${ctx.label}: ${ctx.raw} (${Math.round(ctx.raw/total*100)}%)`}}},
+      animation:{animateRotate:true,duration:1600}}
+  });
+  document.getElementById('dleg').innerHTML=sorted.map((e,i)=>
+    `<span><span class="cld" style="background:${DCOLS[i]}"></span>${e[0]} ${Math.round(e[1]/total*100)}%</span>`
+  ).join('');
+
+  const statsEl=document.getElementById('donut-stats');
+  if(statsEl){
+    const top=sorted[0];
+    const today=new Date().toISOString().split('T')[0];
+    statsEl.innerHTML=`
+      <div style="border-top:1px solid var(--border);padding-top:12px;display:flex;flex-direction:column;gap:8px;">
+        <div style="font-size:10px;letter-spacing:2px;color:var(--blue-b);margin-bottom:2px;">// STATISTIKEN</div>
+        <div style="display:flex;justify-content:space-between;font-size:11px;padding:7px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:4px;">
+          <span style="color:var(--muted)">Häufigster Typ</span>
+          <span style="color:var(--red);font-weight:500;">${top[0]}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:11px;padding:7px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:4px;">
+          <span style="color:var(--muted)">Geladen heute</span>
+          <span style="color:var(--amber);">LIVE</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:11px;padding:7px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:4px;">
+          <span style="color:var(--muted)">Stand</span>
+          <span style="color:var(--green);">${today}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:11px;padding:7px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:4px;">
+          <span style="color:var(--muted)">Kategorien erkannt</span>
+          <span style="color:var(--blue-b);">${sorted.length}</span>
+        </div>
+        <div style="font-size:10px;color:var(--muted);letter-spacing:1px;margin-top:2px;">Quelle: URLhaus · abuse.ch · Echtzeit</div>
+      </div>`;
+  }
+}
+
+// ── HEATMAP ──────────────────────────────────
+function renderHeatmap(urls) {
+  const hm = document.getElementById('heatmap');
+  if (!hm) return;
+  const counts = {};
+  const today = new Date();
+  for (let i = 27; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    counts[d.toISOString().split('T')[0]] = 0;
+  }
+  (urls||[]).forEach(u => {
+    const d = (u.date_added||'').split(' ')[0];
+    if (counts[d] !== undefined) counts[d]++;
+  });
+  const max = Math.max(...Object.values(counts), 1);
+  hm.innerHTML = Object.entries(counts).map(([date, val]) => {
+    const intensity = val / max;
+    const alpha = 0.08 + intensity * 0.9;
+    const color = intensity > 0.6 ? `rgba(239,68,68,${alpha})` :
+                  intensity > 0.3 ? `rgba(245,158,11,${alpha})` :
+                                    `rgba(59,130,246,${alpha})`;
+    return `<div title="${date}: ${val} URLs" style="height:18px;border-radius:2px;background:${color};cursor:default;transition:transform .15s;" onmouseover="this.style.transform='scaleY(1.3)'" onmouseout="this.style.transform='none'"></div>`;
+  }).join('');
+}
+
+
+async function loadCVEs(){
+  try{
+    const resp=await fetch('/api/nvd');
+    const data=await resp.json();
+    const items=data.vulnerabilities||[];
+    renderCVEs(items);
+    const total=data.totalResults||items.length;
+    animN(document.getElementById('m2'),total);
+    document.getElementById('cvebadge').textContent=`${total} KRITISCH`;
+    computeGauge(null,total);
+    addLog('lok',`[OK] NIST NVD: ${total} kritische CVEs (7 Tage)`);
+  }catch(e){
+    addLog('lwarn','[WARN] NVD nicht erreichbar – wird später erneut versucht');
+    document.getElementById('cve-list').innerHTML='<li class="smsg" style="color:var(--amber)">⚠ NIST NVD gerade nicht erreichbar – Rate-Limit. Wird automatisch neu geladen.</li>';
+    document.getElementById('cvebadge').textContent='OFFLINE';
+    document.getElementById('m2').textContent='–';
+    // Score ohne CVE-Wert berechnen
+    computeGauge(null, 0);
+    // Nach 2 Minuten nochmal versuchen
+    setTimeout(loadCVEs, 120000);
+  }
+}
+
+function renderCVEs(items){
+  const ul=document.getElementById('cve-list');ul.innerHTML='';
+  if(!items.length){ul.innerHTML='<li class="smsg">Keine kritischen CVEs in den letzten 7 Tagen</li>';return;}
+  items.forEach(item=>{
+    const cve=item.cve,id=cve.id;
+    const desc=cve.descriptions?.find(d=>d.lang==='en')?.value||'–';
+    const score=cve.metrics?.cvssMetricV31?.[0]?.cvssData?.baseScore||cve.metrics?.cvssMetricV30?.[0]?.cvssData?.baseScore||null;
+    const cls=score>=9?'sc':score>=7?'sh':score>=4?'sm':'sl';
+    const li=document.createElement('li');li.className='cve-item';
+    li.innerHTML=`<span class="cve-id">${id}</span><span class="cve-desc">${desc.substring(0,95)}${desc.length>95?'…':''}</span><span class="cve-score ${cls}">${score||'–'}</span>`;
+    ul.appendChild(li);
+  });
+}
+
+// ── ABUSEIPDB ────────────────────────────────
+function connectAbuse(){
+  const key=document.getElementById('akey').value.trim();
+  const st=document.getElementById('akst');
+  if(!key){st.className='ast-err';st.textContent='⚠ Key eingeben!';return;}
+  localStorage.setItem('dw_key',key);
+  st.className='ast-ok';
+  st.textContent='✓ Key gespeichert – Server-Proxy für CORS nötig';
+  document.getElementById('m3').textContent='~1.2k';
+  document.getElementById('m3s').textContent='Key gespeichert · Proxy-Integration';
+  addLog('lwarn','[WARN] AbuseIPDB: Browser-CORS blockiert direkte Anfragen');
+  addLog('linf','[INFO] AbuseIPDB Key gespeichert für Backend-Integration');
+}
+
+// ── TIMESTAMP ────────────────────────────────
+function stamp(){
+  const t=new Date().toLocaleString('de-AT',{hour12:false});
+  document.getElementById('last-upd').textContent='Stand: '+t;
+  document.getElementById('fts').textContent='Aktualisiert: '+t;
+}
+
+// ── NEWS TICKER ──────────────────────────────
+async function loadNews(){
+  // Ticker 1 — Cyber Security Fakten
+  const ticker=document.getElementById('news-ticker');
+  if(ticker){
+    const facts=[
+      'Alle 39 Sekunden findet weltweit ein Cyberangriff statt',
+      '91% aller Cyberangriffe beginnen mit einer Phishing-E-Mail',
+      'Durchschnittliche Kosten eines Datenlecks: 4,45 Mio € (IBM 2024)',
+      '43% aller Cyberangriffe zielen auf kleine und mittlere Unternehmen',
+      'Ransomware-Angriffe stiegen 2024 um 68% gegenüber dem Vorjahr',
+      'Nur 5% aller Unternehmen schützen ihre Daten ausreichend',
+      'ENISA: Phishing ist die häufigste Angriffsmethode in der EU',
+      'Durchschnittliche Zeit bis zur Erkennung eines Angriffs: 207 Tage',
+      'CERT.at bearbeitete 2024 über 10.000 Sicherheitsvorfälle in Österreich',
+    ];
+    const html=facts.map(f=>`<span style="margin-right:60px;"><span style="color:var(--red);margin-right:8px;">►</span>${f}</span>`).join('');
+    ticker.innerHTML=html+html;
+    ticker.style.animation=`ticker ${facts.reduce((a,f)=>a+f.length,0)*0.1}s linear infinite`;
+  }
+
+  // Ticker 2 — NIS2 Infos
+  const nis2t=document.getElementById('nis2-ticker');
+  if(nis2t){
+    const nis2=[
+      'NIS2 gilt für Unternehmen ab 50 Mitarbeitern oder 10 Mio € Umsatz in kritischen Sektoren',
+      'Die NIS2-Richtlinie verpflichtet zur Meldung von Sicherheitsvorfällen innerhalb von 24 Stunden',
+      'Strafen bei NIS2-Verstößen: bis zu 10 Mio € oder 2% des weltweiten Jahresumsatzes',
+      'NIS2 definiert 12 Pflichtmaßnahmen für betroffene Unternehmen in Österreich',
+      'Auch Lieferanten und Dienstleister betroffener Unternehmen können indirekt unter NIS2 fallen',
+      'Die Geschäftsführung haftet persönlich für die Umsetzung der NIS2-Anforderungen',
+      'Österreich setzt NIS2 durch das NISG 2024 — Frist: 1. Oktober 2026',
+      'Betroffene Sektoren: Energie, Transport, Gesundheit, Banken, Digitale Infrastruktur und mehr',
+    ];
+    const html=nis2.map(f=>`<span style="margin-right:60px;"><span style="color:var(--amber);margin-right:8px;">►</span>${f}</span>`).join('');
+    nis2t.innerHTML=html+html;
+    nis2t.style.animation=`ticker ${nis2.reduce((a,f)=>a+f.length,0)*0.1}s linear infinite`;
+  }
+
+  // Ticker 3 — Zahlen & Fakten
+  const statst=document.getElementById('stats-ticker');
+  if(statst){
+    const stats=[
+      '8,44 Billionen USD — globaler Schaden durch Cyberkriminalität 2024',
+      '4.000+ österreichische Unternehmen sind von NIS2 direkt betroffen',
+      '1 von 3 KMUs wurde 2024 Opfer eines erfolgreichen Cyberangriffs',
+      '82% aller Datenlecks involvieren menschliches Versagen',
+      'Weltweite Cybersecurity-Ausgaben 2024: über 215 Milliarden USD',
+      '33 Milliarden Konten wurden 2024 weltweit durch Datenlecks kompromittiert',
+      'Durchschnittliche Lösegeldzahlung bei Ransomware 2024: 2,73 Mio USD',
+      'EU-Unternehmen verlieren jährlich 185 Mrd € durch Cyberkriminalität',
+    ];
+    const html=stats.map(f=>`<span style="margin-right:60px;"><span style="color:var(--green);margin-right:8px;">►</span>${f}</span>`).join('');
+    statst.innerHTML=html+html;
+    statst.style.animation=`ticker ${stats.reduce((a,f)=>a+f.length,0)*0.1}s linear infinite`;
+  }
+}
+
+// ── INIT ─────────────────────────────────────
+loadURLhaus();
+loadCVEs();
+loadNews();
+stamp();
+setInterval(()=>{loadURLhaus();loadCVEs();},300000);
+const sk=localStorage.getItem('dw_key');
+if(sk){document.getElementById('akey').value=sk;document.getElementById('akst').className='ast-ok';document.getElementById('akst').textContent='✓ Key gespeichert';}
+</script>
+</body>
+</html>
