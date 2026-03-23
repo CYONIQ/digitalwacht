@@ -8,25 +8,32 @@ export default async function handler(req, res) {
   }
 
   try {
-    const response = await fetch('https://feeds.feedburner.com/TheHackersNews', {
-      headers: { 'User-Agent': 'DigitalWacht-Dashboard/1.0' }
-    });
-    const xml = await response.text();
+    // Versuche mehrere Security News Feeds
+    const feeds = [
+      'https://thehackernews.com/feeds/posts/default',
+      'https://feeds.feedburner.com/TheHackersNews',
+      'https://www.bleepingcomputer.com/feed/',
+    ];
 
-    // Parse RSS titles und links
+    let xml = '';
+    for (const url of feeds) {
+      try {
+        const r = await fetch(url, { headers: { 'User-Agent': 'DigitalWacht-Dashboard/1.0' } });
+        if (r.ok) { xml = await r.text(); break; }
+      } catch(e) { continue; }
+    }
+
+    if (!xml) return res.status(200).json({ items: [] });
+
     const items = [];
-    const matches = xml.matchAll(/<item>([\s\S]*?)<\/item>/g);
+    const matches = xml.matchAll(/<item>([\s\S]*?)<\/item>|<entry>([\s\S]*?)<\/entry>/g);
     for (const match of matches) {
-      const titleMatch = match[1].match(/<title><!\[CDATA\[(.*?)\]\]><\/title>/) ||
-                         match[1].match(/<title>(.*?)<\/title>/);
-      const linkMatch  = match[1].match(/<link>(.*?)<\/link>/);
-      const dateMatch  = match[1].match(/<pubDate>(.*?)<\/pubDate>/);
+      const block = match[1] || match[2];
+      const titleMatch = block.match(/<title><!\[CDATA\[(.*?)\]\]><\/title>/) ||
+                         block.match(/<title[^>]*>(.*?)<\/title>/s);
       if (titleMatch) {
-        items.push({
-          title: titleMatch[1].trim(),
-          link:  linkMatch  ? linkMatch[1].trim()  : '#',
-          date:  dateMatch  ? dateMatch[1].trim()  : '',
-        });
+        const title = titleMatch[1].replace(/<[^>]+>/g, '').trim();
+        if (title) items.push({ title });
       }
       if (items.length >= 10) break;
     }
